@@ -30,70 +30,89 @@ package net.md_5.specialsource.util;
 
 import com.google.common.base.CharMatcher;
 import java.io.*;
+import java.net.HttpURLConnection;
 import java.net.URL;
+import java.net.URLConnection;
 import java.nio.channels.Channels;
 import java.nio.channels.ReadableByteChannel;
 import net.md_5.specialsource.SpecialSource;
 
 public class FileLocator {
 
-    public static boolean useCache = true;
+	public static boolean useCache = true;
 
-    private static File download(String url) throws IOException {
-        // Create temporary dir in system location
-        File tempDir = new File(System.getProperty("java.io.tmpdir") + File.separator + "ss-cache");
-        if (!tempDir.exists()) {
-            tempDir.mkdirs();
-        }
+	private static File download(String url) throws IOException {
+		// Create temporary dir in system location
+		File tempDir = new File(System.getProperty("java.io.tmpdir") + File.separator + "ss-cache");
+		if (!tempDir.exists()) {
+			tempDir.mkdirs();
+		}
 
-        // Create our own cache file here, replacing potentially invalid characters
-        String id = CharMatcher.javaLetterOrDigit().or(CharMatcher.anyOf("-_.")).negate().replaceFrom(url.toString(), '_');
-        File file = new File(tempDir, id);
+		// Create our own cache file here, replacing potentially invalid characters
+		String id = CharMatcher
+				.javaLetterOrDigit()
+				.or(CharMatcher.anyOf("-_."))
+				.negate()
+				.replaceFrom(url.toString(), '_');
+		File file = new File(tempDir, id);
 
-        // Check cache for a hit
-        if (file.exists() && useCache) {
-            if (true || SpecialSource.verbose()) {
-                System.out.println("Using cached file " + file.getPath() + " for " + url);
-            }
+		// Check cache for a hit
+		if (file.exists() && useCache) {
+			if (true || SpecialSource.verbose()) {
+				System.out.println("Using cached file " + file.getPath() + " for " + url);
+			}
 
-            return file;
-        }
+			return file;
+		}
 
-        // Nope, we need to download it ourselves
-        if (true || SpecialSource.verbose()) {
-            System.out.println("Downloading " + url);
-        }
+		// Nope, we need to download it ourselves
+		if (true || SpecialSource.verbose()) {
+			System.out.println("Downloading " + url);
+		}
 
-        // TODO: Better solution for cleaning names - this extraneous '\' is introduced by path joining on the mcp dir
-        try (ReadableByteChannel rbc = Channels.newChannel(new URL(url.replace('\\', '/')).openStream());
-             FileOutputStream fos = new FileOutputStream(file)) {
-            fos.getChannel().transferFrom(rbc, 0, 1 << 24);
-        }
+		// TODO: Better solution for cleaning names - this extraneous '\' is introduced
+		// by path joining on the mcp dir
+		URL urlo = new URL(url.replace('\\', '/'));
+		URLConnection urlc = urlo.openConnection();
+		urlc.connect();
 
-        // Success!
-        if (SpecialSource.verbose()) {
-            System.out.println("Downloaded to " + file.getPath());
-        }
+		if (urlc instanceof HttpURLConnection) {
+			int statusCode = ((HttpURLConnection) urlc).getResponseCode();
+			if(statusCode < 200 || statusCode >= 400) {
+				System.out.println("Failed to download " + url);
+				return file;
+			}
+		}
 
-        return file;
-    }
+		try (ReadableByteChannel rbc = Channels.newChannel(urlc.getInputStream());
+				FileOutputStream fos = new FileOutputStream(file)) {
+			fos.getChannel().transferFrom(rbc, 0, 1 << 24);
+		}
 
-    /**
-     * Either download, or get a File object corresponding to the given URL /
-     * file name.
-     *
-     * @param path
-     * @return
-     * @throws IOException
-     */
-    public static File getFile(String path) throws IOException {
-        if (isHTTPURL(path)) {
-            return download(path);
-        }
-        return new File(path);
-    }
+		// Success!
+		if (SpecialSource.verbose()) {
+			System.out.println("Downloaded to " + file.getPath());
+		}
 
-    public static boolean isHTTPURL(String string) {
-        return string.startsWith("http://") || string.startsWith("https://");
-    }
+		return file;
+	}
+
+	/**
+	 * Either download, or get a File object corresponding to the given URL / file
+	 * name.
+	 *
+	 * @param path
+	 * @return
+	 * @throws IOException
+	 */
+	public static File getFile(String path) throws IOException {
+		if (isHTTPURL(path)) {
+			return download(path);
+		}
+		return new File(path);
+	}
+
+	public static boolean isHTTPURL(String string) {
+		return string.startsWith("http://") || string.startsWith("https://");
+	}
 }
